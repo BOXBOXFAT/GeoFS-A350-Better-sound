@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         GeoFS A350 Better Sound Addon
+// @name         GeoFS A350 Better Sound Addon (Force Replace Sound)
 // @namespace    https://geofs.com
-// @version      1.0
-// @description  Better sound pack for A350 – flaps, takeoff, boarding, touchdown
+// @version      2.0
+// @description  Replace all A350 sounds with custom audio + auto mute GeoFS default sounds
 // @match        https://*/geofs.php*
 // @match        http://*/geofs.php*
 // @grant        none
@@ -12,25 +12,58 @@
     "use strict";
 
     //-----------------------------------------------------------------------
-    // --- CONFIG: AUDIO FILES (bạn thay link MP3 vào đây)
+    // --- LOAD CUSTOM AUDIO
     //-----------------------------------------------------------------------
 
-    const flapSound = new Audio("A350flapsound.mp3");
-    const takeoffSound = new Audio("TakeoffA350.mp3");
-    const boardingSound = new Audio("passenger-boarding-noise_RgCFFnpO.mp3");
+    const flapSound = new Audio("https://audio.jukehost.co.uk/VuQjxNQKCK2DLlrDAC4x3guifJTAB6aL");
+    const takeoffSound = new Audio("https://audio.jukehost.co.uk/0zyPprmtiLZqqots7hVAf0WOoNhIRFDA");
+    const boardingSound = new Audio("https://audio.jukehost.co.uk/VuQjxNQKCK2DLlrDAC4x3guifJTAB6aL");
     const touchdownSound = new Audio("touchdownA350.mp3");
-
     boardingSound.loop = true;
 
     //-----------------------------------------------------------------------
-    // --- ONLY ACTIVATE FOR A350
+    // --- ONLY FOR A350
     //-----------------------------------------------------------------------
     function isA350() {
-        return geofs.aircraft.instance.id == 24;
+        return geofs?.aircraft?.instance?.id == 24;
     }
 
     //-----------------------------------------------------------------------
-    // --- CREATE UI
+    // --- MUTE ENTIRE GEOFS BUILT-IN SOUNDS
+    //-----------------------------------------------------------------------
+
+    function forceMuteGeoFSSounds() {
+        try {
+            // 1) mute main sound engine
+            geofs.fx.volume = 0;
+
+            // 2) mute all defined aircraft sounds
+            if (geofs.aircraft.instance.definition.sounds) {
+                for (let snd in geofs.aircraft.instance.definition.sounds) {
+                    geofs.aircraft.instance.definition.sounds[snd] = "";
+                }
+            }
+
+            // 3) mute sound channels
+            if (window.geofs && geofs.sound) {
+                if (geofs.sound.fx) geofs.sound.fx.gain.gain.value = 0;
+                if (geofs.sound.atc) geofs.sound.atc.gain.gain.value = 0;
+            }
+        } catch (e) {
+            console.log("GeoFS mute error:", e);
+        }
+    }
+
+    //-----------------------------------------------------------------------
+    // --- AUTO CHECK + APPLY MUTE WHEN A350 SELECTED
+    //-----------------------------------------------------------------------
+
+    setInterval(() => {
+        if (isA350()) forceMuteGeoFSSounds();
+    }, 500);
+
+    //-----------------------------------------------------------------------
+    // --- UI BOARDING PANEL
     //-----------------------------------------------------------------------
 
     const ui = document.createElement("div");
@@ -93,61 +126,56 @@
 
     document.body.appendChild(ui);
 
-    // hide / show
+    //-----------------------------------------------------------------------
+    // UI BUTTONS
+    //-----------------------------------------------------------------------
+
     document.getElementById("a350HideBtn").onclick = () => {
-        if (ui.style.display !== "none") {
-            ui.style.display = "none";
-            setTimeout(() => alert("Bảng Boarding đã ẩn — reload trang để hiện lại"), 100);
-        }
+        ui.style.display = "none";
+        setTimeout(() => alert("Bảng Boarding đã ẩn — reload trang để hiện lại"), 100);
     };
 
-    // play boarding
     document.getElementById("boardingPlay").onclick = () => {
         if (isA350()) boardingSound.play();
     };
 
-    // stop boarding
     document.getElementById("boardingStop").onclick = () => {
         boardingSound.pause();
         boardingSound.currentTime = 0;
     };
 
     //-----------------------------------------------------------------------
-    // --- EVENT: FLAP SOUND
+    // FLAPS SOUND
     //-----------------------------------------------------------------------
 
     let lastFlap = 0;
     setInterval(() => {
         if (!isA350()) return;
 
-        let currentFlap = geofs.aircraft.instance.animationValues.flaps;
-
-        if (currentFlap !== lastFlap) {
+        let current = geofs.aircraft.instance.animationValues.flaps;
+        if (current !== lastFlap) {
             flapSound.currentTime = 0;
             flapSound.play();
-            lastFlap = currentFlap;
+            lastFlap = current;
         }
     }, 150);
 
     //-----------------------------------------------------------------------
-    // --- EVENT: TAKEOFF FULL THRUST SOUND
+    // TAKEOFF THRUST SOUND
     //-----------------------------------------------------------------------
 
     setInterval(() => {
         if (!isA350()) return;
 
         let thrust = geofs.aircraft.instance.animationValues.throttle;
-
-        if (thrust > 0.95) { 
-            if (takeoffSound.paused) {
-                takeoffSound.currentTime = 0;
-                takeoffSound.play();
-            }
+        if (thrust > 0.95 && takeoffSound.paused) {
+            takeoffSound.currentTime = 0;
+            takeoffSound.play();
         }
     }, 200);
 
     //-----------------------------------------------------------------------
-    // --- EVENT: TOUCHDOWN SOUND
+    // TOUCHDOWN SOUND
     //-----------------------------------------------------------------------
 
     let wasOnGround = false;
@@ -156,12 +184,11 @@
         if (!isA350()) return;
 
         let onGround = geofs.animation.values.groundContact == 1;
-
         if (onGround && !wasOnGround) {
             touchdownSound.currentTime = 0;
             touchdownSound.play();
         }
-
         wasOnGround = onGround;
     }, 120);
+
 })();
